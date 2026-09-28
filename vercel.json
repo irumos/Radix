@@ -5,7 +5,9 @@
       "framework": "vite"
     },
     "backend": {
-      "root": "backend"
+      "root": "backend",
+      "framework": "fastapi",
+      "entrypoint": "app:app"
     }
   },
   "rewrites": [
@@ -25,3 +27,4 @@
     }
   ]
 }
+
