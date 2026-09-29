@@ -1,20 +1,19 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
-import CosmicBackground from './CosmicBackground';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Briefcase, FileText, CheckCircle, AlertTriangle, 
   Settings, Award, Plus, Trash2, Cpu, BarChart2, Edit3,
   UploadCloud, ArrowRight, RefreshCw, Layers, Download,
   Search, X, Check, File, Calendar, Sparkles, Filter, ChevronRight, ChevronDown,
-  TrendingUp, Activity, HelpCircle, Users,
-  CheckSquare, ShieldCheck, MessageSquare, Send, Sun, Moon
+  TrendingUp, Activity, HelpCircle, Users, Mail, Phone, ExternalLink,
+  MapPin, CheckSquare, ShieldCheck, MessageSquare, Send, Globe, Terminal, Sun, Moon
 } from 'lucide-react';
 import { 
   ResponsiveContainer, RadarChart, PolarGrid, 
   PolarAngleAxis, PolarRadiusAxis, Radar,
-  BarChart, Bar, XAxis, YAxis, Tooltip,
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   Cell, AreaChart, Area
 } from 'recharts';
 
@@ -255,12 +254,12 @@ function CandidateSelector({
   useEffect(() => {
     if (isOpen) {
       updateCoords();
-      window.addEventListener('resize', updateCoords);
-      window.addEventListener('scroll', updateCoords, true);
+      window.addEventListener('resize', updateCoords, { passive: true });
+      window.addEventListener('scroll', updateCoords, { capture: true, passive: true });
     }
     return () => {
       window.removeEventListener('resize', updateCoords);
-      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('scroll', updateCoords, { capture: true });
     };
   }, [isOpen]);
 
@@ -489,9 +488,221 @@ function CandidateSelector({
   );
 }
 
+// 2. Three.js interactive 3D Globe component with mouse tilt and dynamic lights
+function VisualGlobe3D() {
+  const canvasRef = useRef(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    
+    let THREE;
+    let scene, camera, renderer, globe, pointLight, shapesGroup;
+    let shapes = [];
+    let animationFrameId;
+    
+    // Local tracking of mouse coordinate coordinates without triggering state re-renders
+    const localMouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const handleLocalMouseMove = (e) => {
+      localMouse.x = e.clientX;
+      localMouse.y = e.clientY;
+    };
+    window.addEventListener('mousemove', handleLocalMouseMove);
+    
+    import('three').then((module) => {
+      THREE = module;
+      const canvas = canvasRef.current;
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+      camera.position.z = 10;
+      
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: true
+      });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+
+      // Particle Sphere / Globe setup
+      const particleCount = 1400;
+      const radius = 3.6;
+      const particleGeo = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      const colors = new Float32Array(particleCount * 3);
+      
+      for (let i = 0; i < particleCount; i++) {
+        const u = Math.random();
+        const v = Math.random();
+        const theta = u * 2.0 * Math.PI;
+        const phi = Math.acos(2.0 * v - 1.0);
+        
+        positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = radius * Math.cos(phi);
+        
+        const mix = Math.sin(phi) * 0.5 + 0.5;
+        colors[i * 3] = mix * 0.6 + 0.3; // R
+        colors[i * 3 + 1] = 0.2; // G
+        colors[i * 3 + 2] = (1 - mix) * 0.8 + 0.2; // B
+      }
+      
+      particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      
+      const material = new THREE.PointsMaterial({
+        size: 0.05,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending
+      });
+      
+      globe = new THREE.Points(particleGeo, material);
+      
+      // Group wrapper to separate auto-rotation from cursor coordinates tilts
+      const group = new THREE.Group();
+      group.add(globe);
+      scene.add(group);
+      
+      // Floating 3D Geometric Nodes
+      shapesGroup = new THREE.Group();
+      const geometries = [
+        new THREE.IcosahedronGeometry(0.3, 0),
+        new THREE.TorusGeometry(0.24, 0.08, 8, 24),
+        new THREE.OctahedronGeometry(0.24, 0)
+      ];
+      
+      const shapeMat = new THREE.MeshPhongMaterial({
+        color: 0x8b5cf6,
+        emissive: 0x3b82f6,
+        specular: 0xffffff,
+        shininess: 80,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.45
+      });
+      
+      for (let i = 0; i < 7; i++) {
+        const mesh = new THREE.Mesh(geometries[i % geometries.length], shapeMat);
+        mesh.position.set(
+          (Math.random() - 0.5) * 11,
+          (Math.random() - 0.5) * 8,
+          (Math.random() - 0.5) * 6
+        );
+        shapesGroup.add(mesh);
+        shapes.push({
+          mesh,
+          speedX: (Math.random() - 0.5) * 0.008,
+          speedY: (Math.random() - 0.5) * 0.008,
+          rotSpeed: (Math.random() - 0.5) * 0.015
+        });
+      }
+      scene.add(shapesGroup);
+      
+      // Dynamic lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+      scene.add(ambientLight);
+      
+      pointLight = new THREE.PointLight(0xa78bfa, 2.5, 20);
+      pointLight.position.set(2, 2, 4);
+      scene.add(pointLight);
+      
+      const handleResize = () => {
+        if (!canvas) return;
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      };
+      window.addEventListener('resize', handleResize);
+
+      // Intersection Observer to sleep Three.js rendering offscreen
+      let isVisible = true;
+      const observer = new IntersectionObserver(([entry]) => {
+        isVisible = entry.isIntersecting;
+      }, { threshold: 0.02 });
+      observer.observe(canvas);
+      
+      const animate = () => {
+        animationFrameId = requestAnimationFrame(animate);
+        
+        // Skip computations if canvas is scrolled out of viewport
+        if (!isVisible) return;
+        
+        // Auto rotate points globe
+        globe.rotation.y += 0.0012;
+        globe.rotation.x += 0.0003;
+        
+        // Calculate dynamic coordinate tilts based on mouse position
+        const mouseX = (localMouse.x / window.innerWidth) * 2 - 1;
+        const mouseY = -(localMouse.y / window.innerHeight) * 2 + 1;
+        
+        // Tilt the group container smoothly with heavy inertia/dampened tracking
+        const targetGroupRotY = mouseX * 0.18; // maximum movement limit (10 degrees tilt max)
+        const targetGroupRotX = -mouseY * 0.18;
+        
+        group.rotation.y += (targetGroupRotY - group.rotation.y) * 0.025;
+        group.rotation.x += (targetGroupRotX - group.rotation.x) * 0.025;
+        
+        // Animate floating nodes
+        shapes.forEach((s) => {
+          s.mesh.position.y += Math.sin(Date.now() * 0.0012 + s.mesh.position.x) * 0.0018;
+          s.mesh.rotation.x += s.rotSpeed;
+          s.mesh.rotation.y += s.rotSpeed * 0.4;
+        });
+        
+        // Eased lights coordinate tracks
+        const targetLightX = mouseX * 6;
+        const targetLightY = mouseY * 4;
+        pointLight.position.x += (targetLightX - pointLight.position.x) * 0.03;
+        pointLight.position.y += (targetLightY - pointLight.position.y) * 0.03;
+        
+        renderer.render(scene, camera);
+      };
+      
+      setIsLoaded(true);
+      animate();
+      
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        window.removeEventListener('mousemove', handleLocalMouseMove);
+        observer.unobserve(canvas);
+        cancelAnimationFrame(animationFrameId);
+        renderer.dispose();
+      };
+    });
+  }, []);
+
+  return (
+    <div className="relative w-full h-[400px] md:h-[500px] flex items-center justify-center">
+      <AnimatePresence>
+        {!isLoaded && (
+          <motion.div
+            key="loader"
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-0"
+          >
+            <div className="w-16 h-16 rounded-full border border-purple-500/10 border-t-purple-500 animate-spin" />
+            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest animate-pulse">Initializing WebGL Engine...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <canvas 
+        ref={canvasRef} 
+        className={`w-full h-full pointer-events-none block z-10 transition-opacity duration-700 ${isLoaded ? 'opacity-100' : 'opacity-0'}`} 
+      />
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
-  const [scrollPos, setScrollPos] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(false);
   const [theme, setTheme] = useState('dark');
   
   const spotlightRef = useRef(null);
@@ -501,16 +712,30 @@ export default function App() {
   const [cmdSearch, setCmdSearch] = useState('');
 
   useEffect(() => {
+    let mouseRafId = null;
     const handleMouseMove = (e) => {
-      if (spotlightRef.current) {
-        spotlightRef.current.style.background = theme === 'dark'
-          ? `radial-gradient(800px at ${e.clientX}px ${e.clientY}px, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.03), transparent 70%)`
-          : `radial-gradient(800px at ${e.clientX}px ${e.clientY}px, rgba(139, 92, 246, 0.04), rgba(59, 130, 246, 0.01), transparent 70%)`;
+      if (mouseRafId) cancelAnimationFrame(mouseRafId);
+      mouseRafId = requestAnimationFrame(() => {
+        if (spotlightRef.current) {
+          spotlightRef.current.style.background = theme === 'dark'
+            ? `radial-gradient(800px at ${e.clientX}px ${e.clientY}px, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.03), transparent 70%)`
+            : `radial-gradient(800px at ${e.clientX}px ${e.clientY}px, rgba(139, 92, 246, 0.04), rgba(59, 130, 246, 0.01), transparent 70%)`;
+        }
+      });
+    };
+
+    let scrollTicking = false;
+    const handleScroll = () => {
+      if (!scrollTicking) {
+        window.requestAnimationFrame(() => {
+          const scrolled = window.scrollY > 10;
+          setIsScrolled((prev) => (prev !== scrolled ? scrolled : prev));
+          scrollTicking = false;
+        });
+        scrollTicking = true;
       }
     };
-    const handleScroll = () => {
-      setScrollPos(window.scrollY);
-    };
+
     // Ctrl+K command palette trigger
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -521,10 +746,13 @@ export default function App() {
         setCmdOpen(false);
       }
     };
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('scroll', handleScroll);
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
     window.addEventListener('keydown', handleKeyDown);
+
     return () => {
+      if (mouseRafId) cancelAnimationFrame(mouseRafId);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('keydown', handleKeyDown);
@@ -532,6 +760,7 @@ export default function App() {
   }, [theme]);
 
   const [profiles, setProfiles] = useState([]);
+  const [activeStoryStep, setActiveStoryStep] = useState(0);
   const [jobs, setJobs] = useState([]);
   
   // Selection states for matching
@@ -552,6 +781,7 @@ export default function App() {
   const [jdUploadProgress, setJdUploadProgress] = useState(0);
   const [jdFileMeta, setJdFileMeta] = useState(null);
   const [jdError, setJdError] = useState('');
+  const [jdParseSuccess, setJdParseSuccess] = useState(false);
   const [isResumeDragging, setIsResumeDragging] = useState(false);
   const [isJdDragging, setIsJdDragging] = useState(false);
   const [isInsightsLoading, setIsInsightsLoading] = useState(false);
@@ -604,7 +834,7 @@ export default function App() {
   const [isChatbotTyping, setIsChatbotTyping] = useState(false);
 
   // Fetch initial data
-  const fetchData = useCallback(async () => {
+  const fetchData = async () => {
     let defaultProfileId = '';
     let defaultJobId = '';
 
@@ -667,12 +897,11 @@ export default function App() {
     } catch (e) {
       console.error("Error fetching jobs:", e);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, []);
 
   // Autoplay visual journey slider gently when on the home tab
   useEffect(() => {
@@ -1218,6 +1447,213 @@ export default function App() {
     { title: 'Run Compatibility Check', action: () => { triggerMatching(); setCmdOpen(false); }, desc: 'Trigger Sentence Transformers matching' }
   ];
 
+  const storySteps = [
+    {
+      title: "Upload Job Specification",
+      sub: "AI extracts and registers role scope",
+      desc: "Our neural parsers decompose uploaded JDs or raw text, extracting required skills, experience thresholds, and preferred qualifications into semantic vector tokens.",
+      visualType: "job"
+    },
+    {
+      title: "Ingest Candidate Resume",
+      sub: "Extracts deep candidate profiles",
+      desc: "Upload candidate resumes in PDF/Word format. The parser structures layout fields, extracting skills lists, academic backgrounds, projects, and work histories.",
+      visualType: "resume"
+    },
+    {
+      title: "Semantic Capability Mapping",
+      sub: "Normalizes terminology barriers",
+      desc: "Bypasses literal matching limitations. If a job requests 'React' and the candidate lists 'Next.js', sentence embeddings map relationship distance accurately.",
+      visualType: "semantic"
+    },
+    {
+      title: "Calculate Talent Readiness",
+      sub: "Measures hiring compatibility indices",
+      desc: "Calculates separate scores for work duration, academic credentials, and project complexity to yield a balanced overall suitability index.",
+      visualType: "readiness"
+    },
+    {
+      title: "Cosine Similarity Matching",
+      sub: "Calculates high-dimensional overlaps",
+      desc: "Evaluates the cosine distance between the candidate skill vector and the job specification requirements vector on the backend FastAPI server in real-time.",
+      visualType: "matching"
+    },
+    {
+      title: "Provide Recruiter Insights",
+      sub: "Automates expert hiring actions",
+      desc: "Generates tailored interview questions based on missing skill parameters, provides upskilling guides, and logs recommended recruiter actions.",
+      visualType: "insights"
+    }
+  ];
+
+  const renderVisualIllustration = (type) => {
+    switch(type) {
+      case 'job':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center relative p-6">
+            <div className="absolute inset-0 bg-purple-500/5 rounded-3xl blur-xl" />
+            <div className="relative border border-purple-500/20 bg-slate-950/40 rounded-2xl p-4 w-48 shadow-2xl flex flex-col gap-2.5 animate-pulse">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                <Briefcase className="h-4 w-4 text-purple-400" />
+                <div className="h-2 w-20 bg-slate-800 rounded" />
+              </div>
+              <div className="h-1.5 w-full bg-slate-850 rounded" />
+              <div className="h-1.5 w-5/6 bg-slate-850 rounded" />
+              <div className="h-1.5 w-4/6 bg-slate-850 rounded" />
+              <div className="flex gap-1.5 mt-2">
+                <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[8px] font-mono">Python</span>
+                <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[8px] font-mono">API</span>
+              </div>
+            </div>
+            {/* Laser scanning line */}
+            <motion.div 
+              animate={{ top: ['20%', '80%', '20%'] }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute left-[20%] right-[20%] h-0.5 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-lg shadow-purple-500/50 pointer-events-none"
+            />
+          </div>
+        );
+      case 'resume':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center relative p-6">
+            <div className="absolute inset-0 bg-blue-500/5 rounded-3xl blur-xl" />
+            <div className="relative border border-blue-500/20 bg-slate-950/40 rounded-2xl p-4 w-48 shadow-2xl flex flex-col gap-2.5">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <User className="h-4 w-4 text-blue-400" />
+                </div>
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-2.5 w-16 bg-slate-800 rounded" />
+                  <div className="h-1.5 w-24 bg-slate-850 rounded" />
+                </div>
+              </div>
+              <div className="border-t border-white/5 pt-2 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <div className="h-1.5 w-10 bg-slate-800 rounded" />
+                  <div className="h-1.5 w-12 bg-blue-500/30 rounded" />
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="h-1.5 w-12 bg-slate-800 rounded" />
+                  <div className="h-1.5 w-8 bg-blue-500/30 rounded" />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'semantic':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center relative p-6">
+            <div className="absolute inset-0 bg-cyan-500/5 rounded-3xl blur-xl" />
+            <div className="flex items-center gap-6 z-10">
+              <div className="px-2.5 py-1.5 rounded-xl border border-cyan-500/20 bg-slate-950/60 text-[9px] font-mono text-cyan-400 shadow-xl">
+                Next.js
+              </div>
+              
+              {/* Pulsing Connector */}
+              <div className="relative w-16 h-0.5 bg-slate-800">
+                <motion.div 
+                  animate={{ left: ['0%', '100%', '0%'] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-cyan-400 blur-[2px]"
+                />
+              </div>
+              
+              <div className="px-2.5 py-1.5 rounded-xl border border-cyan-500/20 bg-slate-950/60 text-[9px] font-mono text-cyan-400 shadow-xl">
+                React
+              </div>
+            </div>
+            <div className="mt-6 text-center">
+              <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold block">Semantic Overlap</span>
+              <span className="text-sm font-black text-cyan-400 font-mono mt-1 block">94.8% Match</span>
+            </div>
+          </div>
+        );
+      case 'readiness':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center relative p-6">
+            <div className="absolute inset-0 bg-pink-500/5 rounded-3xl blur-xl" />
+            <div className="flex gap-4">
+              {[
+                { label: 'EXP', val: 78, color: 'stroke-pink-500' },
+                { label: 'EDU', val: 90, color: 'stroke-purple-500' },
+                { label: 'PROJ', val: 82, color: 'stroke-cyan-500' }
+              ].map((ring, idx) => (
+                <div key={idx} className="flex flex-col items-center gap-1.5">
+                  <div className="relative w-12 h-12 flex items-center justify-center">
+                    <svg className="w-12 h-12 transform -rotate-90">
+                      <circle cx="24" cy="24" r="20" className="stroke-slate-900" strokeWidth="3" fill="transparent" />
+                      <motion.circle 
+                        cx="24" 
+                        cy="24" 
+                        r="20" 
+                        className={ring.color}
+                        strokeWidth="3" 
+                        fill="transparent" 
+                        strokeDasharray={2 * Math.PI * 20}
+                        initial={{ strokeDashoffset: 2 * Math.PI * 20 }}
+                        animate={{ strokeDashoffset: 2 * Math.PI * 20 * (1 - ring.val / 100) }}
+                        transition={{ duration: 1.5, delay: idx * 0.1 }}
+                      />
+                    </svg>
+                    <span className="absolute text-[8px] font-bold text-slate-350">{ring.val}%</span>
+                  </div>
+                  <span className="text-[7px] text-slate-505 font-bold tracking-wider">{ring.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 'matching':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center relative p-6">
+            <div className="absolute inset-0 bg-yellow-500/5 rounded-3xl blur-xl" />
+            <div className="w-32 h-32 border border-slate-850 rounded-full flex items-center justify-center relative">
+              <div className="w-20 h-20 border border-slate-800 rounded-full flex items-center justify-center" />
+              
+              {/* Vector crosshairs */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-full h-0.5 bg-slate-900/50" />
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="h-full w-0.5 bg-slate-900/50" />
+              </div>
+              
+              {/* Pulsing Match target node */}
+              <motion.div 
+                animate={{ scale: [1, 1.15, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="absolute w-4 h-4 rounded-full bg-yellow-500/20 border border-yellow-400 flex items-center justify-center"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+              </motion.div>
+            </div>
+          </div>
+        );
+      case 'insights':
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center relative p-6">
+            <div className="absolute inset-0 bg-green-500/5 rounded-3xl blur-xl" />
+            <div className="relative border border-green-500/20 bg-slate-955/40 rounded-2xl p-4 w-48 shadow-2xl flex flex-col gap-2">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <span className="text-[8px] font-bold text-green-400 uppercase tracking-widest">AI Assessment Passed</span>
+                <CheckCircle className="h-3.5 w-3.5 text-green-400" />
+              </div>
+              <div className="space-y-1.5 pt-1">
+                <div className="h-1 w-full bg-slate-850 rounded" />
+                <div className="h-1 w-5/6 bg-slate-850 rounded" />
+                <div className="h-1 w-4/6 bg-slate-850 rounded" />
+              </div>
+              <div className="mt-2 text-center p-1 rounded bg-green-500/10 border border-green-500/20">
+                <span className="text-[9px] font-bold text-green-400">Hire Recommendation: HIGH</span>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   const filteredCmds = allCmds.filter(c => 
     c.title.toLowerCase().includes(cmdSearch.toLowerCase()) || 
     c.desc.toLowerCase().includes(cmdSearch.toLowerCase())
@@ -1246,8 +1682,11 @@ export default function App() {
         }}
       />
       
-      {/* Premium Cosmic Flow Animated background */}
-      <CosmicBackground theme={theme} />
+      {/* Background Animated aurora elements */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="aurora-bg" style={{ opacity: theme === 'light' ? 0.3 : 1 }} />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#090e18_1px,transparent_1px),linear-gradient(to_bottom,#090e18_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_80%,transparent_100%)] opacity-35" />
+      </div>
 
       {/* Ctrl+K Command Palette Modal Overlay */}
       <AnimatePresence>
@@ -1431,7 +1870,7 @@ export default function App() {
 
       {/* Floating Translucent Sticky Header Navigation */}
       <header className={`sticky top-0 z-40 transition-all duration-300 py-3 ${
-        scrollPos > 10 
+        isScrolled 
           ? theme === 'light'
             ? 'bg-white/75 border-b border-slate-200/60 shadow-lg py-3'
             : 'bg-slate-950/75 border-b border-white/5 shadow-2xl py-3' 
@@ -1521,710 +1960,242 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-10 z-10">
         
         <AnimatePresence mode="wait">
-                 {/* TAB: Home / Redesigned Landing Page with 3D animation */}
+          
+          {/* TAB: Home / Redesigned Landing Page with 3D animation */}
           {activeTab === 'home' && (
             <motion.div
               key="home"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-              className="space-y-36 py-6 overflow-hidden"
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.35 }}
+              className="space-y-24 py-6"
             >
-              {/* CSS Keyframe Animation Style for AI Core and Orbits */}
-              <style>{`
-                @keyframes spin-clockwise { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                @keyframes spin-counter { 0% { transform: rotate(0deg); } 100% { transform: rotate(-360deg); } }
-                @keyframes pulse-core { 0%, 100% { transform: scale(1); opacity: 0.9; filter: drop-shadow(0 0 25px rgba(168,85,247,0.4)); } 50% { transform: scale(1.08); opacity: 1; filter: drop-shadow(0 0 45px rgba(59,130,246,0.6)); } }
-                @keyframes pulse-wisp { 0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.4; } 50% { transform: translate(-10px, 15px) scale(1.15); opacity: 0.7; } }
-                @keyframes float-badge { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-12px) rotate(2deg); } }
-                @keyframes orbit-react { 0% { transform: rotate(0deg) translateX(120px) rotate(0deg); } 100% { transform: rotate(360deg) translateX(120px) rotate(-360deg); } }
-                @keyframes orbit-fastapi { 0% { transform: rotate(60deg) translateX(120px) rotate(-60deg); } 100% { transform: rotate(420deg) translateX(120px) rotate(-420deg); } }
-                @keyframes orbit-supabase { 0% { transform: rotate(120deg) translateX(120px) rotate(-120deg); } 100% { transform: rotate(480deg) translateX(120px) rotate(-480deg); } }
-                @keyframes orbit-openai { 0% { transform: rotate(180deg) translateX(120px) rotate(-180deg); } 100% { transform: rotate(540deg) translateX(120px) rotate(-540deg); } }
-                @keyframes orbit-langchain { 0% { transform: rotate(240deg) translateX(120px) rotate(-240deg); } 100% { transform: rotate(600deg) translateX(120px) rotate(-600deg); } }
-                @keyframes orbit-sentence { 0% { transform: rotate(300deg) translateX(120px) rotate(-300deg); } 100% { transform: rotate(660deg) translateX(120px) rotate(-660deg); } }
-              `}</style>
-
-              {/* ----------------------------------------------------------
-                  SECTION 1: HERO
-                 ---------------------------------------------------------- */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center min-h-[580px] pt-4">
-                {/* Left: Headline & CTA */}
-                <div className="lg:col-span-6 space-y-8 text-left z-10">
+              {/* Fullscreen Hero Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center min-h-[500px]">
+                
+                {/* Left side: Copywriting and CTA */}
+                <div className="lg:col-span-6 space-y-8 text-left">
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-400 shadow-xl"
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-400 shadow-xl"
                   >
                     <Sparkles className="h-3.5 w-3.5 animate-spin-slow text-purple-400" />
-                    <span>RADIX COGNITIVE TALENT OPERATING SYSTEM</span>
+                    <span>PREMIUM AI SEMANTIC MATCH PLATFORM</span>
                   </motion.div>
                   
-                  <h1 className="text-4xl sm:text-7xl font-extrabold tracking-tight leading-[1.05] font-display">
-                    Supercharge <br />
-                    Recruitment with <br />
-                    <TypewriterText words={["Semantic Search", "Cosine Similarity", "Structured Parsers", "Upskilling Paths"]} />
-                  </h1>
+                  <h2 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.08] font-display">
+                    Bridging Pipeline <br />
+                    Gaps with <br />
+                    <TypewriterText words={["AI Semantic Vectors", "Cosine Similarity", "Structured Parsers", "Upskilling Roadmaps"]} />
+                  </h2>
 
                   <p className="text-slate-405 text-sm sm:text-base max-w-lg leading-relaxed">
-                    Automate cognitive alignment. RADIX parses candidate resumes, extracts structural parameters, and applies advanced local CPU Sentence Transformers vector matching.
+                    Supercharge your screening loops. Automatically parses candidate resumes, extracts raw job descriptions, and matches parameters using local CPU Sentence Transformers vector weights.
                   </p>
+
+                  {/* Inline Skill Tags on Mobile/Tablet to avoid clipping/overlap */}
+                  <div className="flex flex-wrap gap-2 md:hidden pt-1">
+                    <span className="px-2 py-1 text-[9px] font-bold glass-panel border border-purple-500/20 text-purple-400 rounded-lg shadow-sm">React.js</span>
+                    <span className="px-2 py-1 text-[9px] font-bold glass-panel border border-blue-500/20 text-blue-400 rounded-lg shadow-sm">Docker</span>
+                    <span className="px-2 py-1 text-[9px] font-bold glass-panel border border-cyan-500/20 text-cyan-400 rounded-lg shadow-sm">FastAPI</span>
+                    <span className="px-2 py-1 text-[9px] font-bold glass-panel border border-green-500/20 text-green-400 rounded-lg shadow-sm">PostgreSQL</span>
+                  </div>
 
                   <div className="flex flex-wrap items-center gap-4 pt-2">
                     <button 
                       onClick={() => setActiveTab('match')}
-                      className="px-8 py-3.5 rounded-full bg-gradient-to-r from-purple-650 to-blue-650 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-xs shadow-xl shadow-purple-500/25 hover:shadow-purple-500/35 transition-all cursor-pointer flex items-center gap-2.5 group"
+                      className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold text-xs shadow-lg shadow-purple-500/20 transition-all duration-200 cursor-pointer flex items-center gap-2 group"
                     >
                       Open Match Workspace
-                      <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                      <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
                     </button>
                     <button 
-                      onClick={() => setActiveTab('dashboard')}
-                      className="px-8 py-3.5 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold text-xs hover:text-white transition-all cursor-pointer flex items-center gap-2.5"
+                      onClick={() => setCmdOpen(true)}
+                      className="px-6 py-3 rounded-full bg-slate-900 border border-slate-800 hover:border-purple-500/20 text-slate-300 font-semibold text-xs hover:text-white transition-all cursor-pointer flex items-center gap-2"
                     >
-                      <BarChart2 className="h-4 w-4 text-purple-400" />
-                      View Analytics
+                      <Terminal className="h-3.5 w-3.5" />
+                      Press Ctrl+K
                     </button>
                   </div>
                 </div>
 
-                {/* Right: Premium Cinematic AI Energy Core */}
-                <div className="lg:col-span-6 flex items-center justify-center relative min-h-[420px]">
-                  {/* Floating Tech Badges */}
-                  <div className="absolute inset-0 z-20 pointer-events-none">
-                    <span style={{ animation: 'float-badge 6s ease-in-out infinite' }} className="absolute top-[10%] left-[15%] px-3 py-1.5 text-[9px] font-bold glass-panel border border-purple-500/25 text-purple-400 rounded-xl shadow-2xl">
-                      LLM Analytics
-                    </span>
-                    <span style={{ animation: 'float-badge 7s ease-in-out infinite 1s' }} className="absolute bottom-[10%] right-[15%] px-3 py-1.5 text-[9px] font-bold glass-panel border border-blue-500/25 text-blue-400 rounded-xl shadow-2xl">
-                      Vector Similarity
-                    </span>
+                {/* Right side: Three.js Interactive Globe */}
+                <div className="lg:col-span-6 flex items-center justify-center relative min-h-[400px]">
+                  {/* Floating Skill Badges Parallax overlays - desktop only */}
+                  <div className="absolute inset-0 z-20 pointer-events-none hidden md:block">
+                    <motion.span 
+                      animate={{ y: [0, -8, 0] }} 
+                      transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute top-[16%] left-[20%] lg:top-[12%] lg:left-[16%] px-2.5 py-1 text-[9px] font-bold glass-panel border-purple-500/20 text-purple-400 rounded-lg shadow-xl"
+                    >
+                      React.js
+                    </motion.span>
+                    <motion.span 
+                      animate={{ y: [0, 6, 0] }} 
+                      transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                      className="absolute bottom-[18%] right-[20%] lg:bottom-[15%] lg:right-[16%] px-2.5 py-1 text-[9px] font-bold glass-panel border-blue-500/20 text-blue-400 rounded-lg shadow-xl"
+                    >
+                      Docker
+                    </motion.span>
+                    <motion.span 
+                      animate={{ y: [0, -5, 0] }} 
+                      transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                      className="absolute bottom-[24%] left-[16%] lg:bottom-[20%] lg:left-[12%] px-2.5 py-1 text-[9px] font-bold glass-panel border-cyan-500/20 text-cyan-400 rounded-lg shadow-xl"
+                    >
+                      FastAPI
+                    </motion.span>
+                    <motion.span 
+                      animate={{ y: [0, 8, 0] }} 
+                      transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+                      className="absolute top-[20%] right-[22%] lg:top-[16%] lg:right-[18%] px-2.5 py-1 text-[9px] font-bold glass-panel border-green-500/20 text-green-400 rounded-lg shadow-xl"
+                    >
+                      PostgreSQL
+                    </motion.span>
                   </div>
 
-                  {/* AI Operating Core Rings */}
-                  <div className="relative h-80 w-80 flex items-center justify-center">
-                    {/* Concentric Rotating Rings */}
-                    <div style={{ animation: 'spin-clockwise 16s linear infinite' }} className="absolute inset-0 border-2 border-dashed border-purple-500/20 rounded-full" />
-                    <div style={{ animation: 'spin-counter 24s linear infinite' }} className="absolute inset-4 border border-dashed border-blue-500/30 rounded-full" />
-                    <div style={{ animation: 'spin-clockwise 8s linear infinite' }} className="absolute inset-8 border border-white/5 rounded-full" />
-                    
-                    {/* Glowing Pulsing AI Sphere */}
-                    <div 
-                      style={{ animation: 'pulse-core 4s ease-in-out infinite' }} 
-                      className="h-36 w-36 rounded-full bg-gradient-to-tr from-purple-650 via-indigo-600 to-cyan-500 flex items-center justify-center opacity-90 relative"
-                    >
-                      {/* Inner Glass Orb */}
-                      <div className="absolute inset-1.5 rounded-full bg-slate-950/70 backdrop-blur-md flex flex-col items-center justify-center text-center p-4">
-                        <Cpu className="h-8 w-8 text-cyan-400 animate-pulse mb-1.5" />
-                        <span className="text-[10px] font-black text-white uppercase tracking-widest font-mono">RADIX.OS</span>
-                        <span className="text-[8px] text-slate-500 uppercase tracking-wider font-semibold">Active Core</span>
-                      </div>
-                    </div>
-                  </div>
+                  <VisualGlobe3D />
                 </div>
+
               </div>
 
-              {/* ----------------------------------------------------------
-                  SECTION 2: PROBLEM STATEMENT
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-6xl mx-auto text-center"
-              >
-                <div className="space-y-3">
-                  <span className="text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Recruitment Friction
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white leading-tight">
-                    The Modern Screening Bottleneck
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-xl mx-auto leading-relaxed">
-                    Legacy matching pipelines are slow, static, and subjective. Here is why modern talent teams struggle:
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {[
-                    {
-                      icon: FileText,
-                      title: "Applicant Overload",
-                      desc: "Recruiters spend an average of 6 seconds per resume. High-quality developers are regularly buried under high volume.",
-                      color: "border-red-500/20 text-red-400 bg-red-500/5"
-                    },
-                    {
-                      icon: AlertTriangle,
-                      title: "Skill Gap Blindspots",
-                      desc: "Keyword matching misses semantic overlaps. Recruiters miss candidates who possess the exact skill sets under synonyms.",
-                      color: "border-yellow-500/20 text-yellow-400 bg-yellow-500/5"
-                    },
-                    {
-                      icon: Activity,
-                      title: "Slow Feedback Loops",
-                      desc: "Traditional screening takes days, leading to high drop-offs. High-end engineers accept offers before assessment completes.",
-                      color: "border-purple-500/20 text-purple-400 bg-purple-500/5"
-                    }
-                  ].map((card, idx) => {
-                    const Icon = card.icon;
-                    return (
-                      <motion.div
-                        key={idx}
-                        whileHover={{ y: -8, border: '1px solid rgba(139, 92, 246, 0.2)' }}
-                        className="glass-panel border border-white/5 rounded-3xl p-8 text-left space-y-4 shadow-xl transition-all duration-300"
-                      >
-                        <div className={`p-3 w-fit rounded-2xl border ${card.color}`}>
-                          <Icon className="h-6 w-6" />
-                        </div>
-                        <h3 className="text-lg font-bold text-white font-display">{card.title}</h3>
-                        <p className="text-xs text-slate-405 leading-relaxed">{card.desc}</p>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 3: HOW AI WORKS TIMELINE JOURNEY
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-6xl mx-auto"
-              >
-                <div className="text-center space-y-3">
-                  <span className="text-[9px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Cognitive Engine
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    Step-by-Step Talent Processing
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-lg mx-auto">
-                    From raw upload to semantic comparison — our pipeline processes candidates objectively.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-6 gap-6 relative">
-                  {[
-                    { step: "01", title: "Upload JD", desc: "Seed target job parameters into memory." },
-                    { step: "02", title: "AI Analysis", desc: "Extract core technical parameters and years of experience." },
-                    { step: "03", title: "Resume Parsing", desc: "Extract candidate details, skills, and work history." },
-                    { step: "04", title: "Talent Check", desc: "Index profile variables against job descriptions." },
-                    { step: "05", title: "Skill Match", desc: "Calculate cosine distance similarity weights." },
-                    { step: "06", title: "Recruiter Insights", desc: "Generate text summaries and gap roadmaps." }
-                  ].map((item, idx) => (
-                    <motion.div
-                      key={idx}
-                      initial={{ opacity: 0, y: 15 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: idx * 0.08 }}
-                      className="glass-panel border border-white/5 rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between min-h-[160px] shadow-lg"
-                    >
-                      <div>
-                        <span className="text-[28px] font-black font-mono text-white/10 absolute top-2 right-4 select-none">{item.step}</span>
-                        <h4 className="text-xs font-black uppercase text-purple-400 tracking-wider mb-2 font-display">{item.title}</h4>
-                        <p className="text-[10px] text-slate-405 leading-relaxed">{item.desc}</p>
-                      </div>
-                      <div className="w-full h-1 bg-gradient-to-r from-purple-500/40 to-blue-500/40 rounded-full mt-4" />
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 4: CORE AI ENGINE INTERACTIVE DIAGRAM
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-5xl mx-auto"
-              >
-                <div className="text-center space-y-3">
-                  <span className="text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Infrastructure
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    Inside the RADIX Core Engine
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-xl mx-auto">
-                    Data flow logic from inputs to vector matching and reports compiler.
-                  </p>
-                </div>
-
-                <div className="glass-panel rounded-3xl p-8 border border-white/5 relative overflow-hidden shadow-2xl flex flex-col md:flex-row items-center justify-between gap-12 min-h-[380px]">
-                  {/* Left: Input Sources */}
-                  <div className="space-y-4 w-full md:w-1/4">
-                    <h4 className="text-xs font-black uppercase text-slate-500 tracking-wider">Inputs</h4>
-                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left space-y-2 flex items-center gap-3">
-                      <File className="h-6 w-6 text-purple-400 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-bold text-white">Candidate Resumes</p>
-                        <p className="text-[8px] text-slate-500">PDF, DOCX formats</p>
-                      </div>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left space-y-2 flex items-center gap-3">
-                      <Briefcase className="h-6 w-6 text-blue-400 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-bold text-white">Job Profiles</p>
-                        <p className="text-[8px] text-slate-500">Structural templates</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Middle: Vector Processor */}
-                  <div className="w-full md:w-2/5 flex flex-col items-center relative">
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500/40 -translate-y-1/2 -z-10 hidden md:block" />
-                    
-                    <div className="p-6 rounded-3xl bg-slate-900 border border-purple-500/30 text-center space-y-3 z-10 max-w-xs shadow-2xl relative">
-                      <div className="absolute -inset-1 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-3xl blur opacity-30 -z-10 animate-pulse" />
-                      <Cpu className="h-8 w-8 text-purple-400 mx-auto animate-spin-slow" />
-                      <h4 className="text-xs font-black uppercase text-white tracking-widest font-mono">Similarity Matrix</h4>
-                      <p className="text-[9px] text-slate-405 leading-relaxed">
-                        Calculates cosine distance weights between embeddings inside local memory spaces.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right: SQLite/Supabase Storage & Reports */}
-                  <div className="space-y-4 w-full md:w-1/4">
-                    <h4 className="text-xs font-black uppercase text-slate-500 tracking-wider text-right md:text-left">Outputs</h4>
-                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left space-y-2 flex items-center gap-3">
-                      <Layers className="h-6 w-6 text-green-400 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-bold text-white">Database Store</p>
-                        <p className="text-[8px] text-slate-500">SQLite & Supabase Sync</p>
-                      </div>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left space-y-2 flex items-center gap-3">
-                      <Sparkles className="h-6 w-6 text-cyan-400 shrink-0" />
-                      <div>
-                        <p className="text-[10px] font-bold text-white">AI Reports Compiler</p>
-                        <p className="text-[8px] text-slate-500">LLM explanatory summaries</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 5: FEATURE SHOWCASE
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-6xl mx-auto"
-              >
-                <div className="text-center space-y-3">
-                  <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Core Capabilities
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    Built for Enterprise Performance
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-xl mx-auto">
-                    Unlock deep candidate analytics. Streamline pipelines and find high-fit engineers.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {[
-                    {
-                      icon: FileText,
-                      title: "Parser Engine",
-                      desc: "Scrape resumes and profiles. Converts chaotic inputs into typed parameters including core competencies and years of experience.",
-                      badge: "Structured Extraction"
-                    },
-                    {
-                      icon: AlertTriangle,
-                      title: "Identify Skill Gaps",
-                      desc: "Pinpoint missing parameters. Our matrix matches candidates against JD requirements and surfaces core topics requiring upskilling.",
-                      badge: "Critical Diagnostics"
-                    },
-                    {
-                      icon: MessageSquare,
-                      title: "AI Recruiter Copilot",
-                      desc: "Discuss candidate matches inside our contextual chat framework. Ask questions and verify details.",
-                      badge: "Intelligent Chatbot"
-                    },
-                    {
-                      icon: Award,
-                      title: "Semantic Suitability",
-                      desc: "Computes cosine distance embeddings. Goes beyond direct keywords to locate overlapping concepts.",
-                      badge: "Vector Similarity"
-                    }
-                  ].map((card, idx) => {
-                    const Icon = card.icon;
-                    return (
-                      <motion.div
-                        key={idx}
-                        whileHover={{ y: -6, border: '1px solid rgba(139, 92, 246, 0.2)' }}
-                        className="glass-panel border border-white/5 rounded-3xl p-8 text-left relative overflow-hidden shadow-2xl transition-all duration-300"
-                      >
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-xl" />
-                        <span className="text-[8px] font-black uppercase text-purple-400 px-2.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 w-fit block mb-4">
-                          {card.badge}
-                        </span>
-                        <div className="flex gap-4 items-start">
-                          <div className="p-3 bg-slate-900 border border-slate-800 text-purple-400 rounded-2xl shrink-0">
-                            <Icon className="h-6 w-6" />
-                          </div>
-                          <div className="space-y-2">
-                            <h3 className="text-lg font-bold text-white font-display">{card.title}</h3>
-                            <p className="text-xs text-slate-405 leading-relaxed">{card.desc}</p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 6: TECHNOLOGY STACK ORBIT
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-5xl mx-auto text-center"
-              >
-                <div className="space-y-3">
-                  <span className="text-[9px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Integrations
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    Fully Integrated Tech Stack
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-lg mx-auto">
-                    RADIX combines premium web libraries, cloud databases, local transformers, and LLM APIs.
-                  </p>
-                </div>
-
-                <div className="relative h-[320px] flex items-center justify-center overflow-hidden">
-                  {/* Central Node */}
-                  <div className="h-28 w-28 rounded-full bg-slate-900 border border-purple-500/40 shadow-2xl flex flex-col items-center justify-center z-10">
-                    <Cpu className="h-6 w-6 text-purple-400 animate-spin-slow mb-1" />
-                    <span className="text-[9px] font-black text-white font-mono uppercase tracking-widest">RADIX CORE</span>
-                  </div>
-
-                  {/* Satellite Nodes revolving via custom CSS keyframes */}
-                  <div style={{ animation: 'orbit-react 22s linear infinite' }} className="absolute h-10 w-10 rounded-full bg-slate-900 border border-blue-500/30 flex items-center justify-center shadow-lg cursor-pointer">
-                    <span className="text-[8px] font-bold text-blue-400 font-mono">React</span>
-                  </div>
-                  <div style={{ animation: 'orbit-fastapi 22s linear infinite' }} className="absolute h-10 w-10 rounded-full bg-slate-900 border border-emerald-500/30 flex items-center justify-center shadow-lg cursor-pointer">
-                    <span className="text-[8px] font-bold text-emerald-400 font-mono">FastAPI</span>
-                  </div>
-                  <div style={{ animation: 'orbit-supabase 22s linear infinite' }} className="absolute h-10 w-10 rounded-full bg-slate-900 border border-green-500/30 flex items-center justify-center shadow-lg cursor-pointer">
-                    <span className="text-[8px] font-bold text-green-400 font-mono">SupaDB</span>
-                  </div>
-                  <div style={{ animation: 'orbit-openai 22s linear infinite' }} className="absolute h-10 w-10 rounded-full bg-slate-900 border border-purple-500/30 flex items-center justify-center shadow-lg cursor-pointer">
-                    <span className="text-[8px] font-bold text-purple-400 font-mono">GPT-5.5</span>
-                  </div>
-                  <div style={{ animation: 'orbit-langchain 22s linear infinite' }} className="absolute h-10 w-10 rounded-full bg-slate-900 border border-orange-500/30 flex items-center justify-center shadow-lg cursor-pointer">
-                    <span className="text-[8px] font-bold text-orange-400 font-mono">LC</span>
-                  </div>
-                  <div style={{ animation: 'orbit-sentence 22s linear infinite' }} className="absolute h-10 w-10 rounded-full bg-slate-900 border border-cyan-500/30 flex items-center justify-center shadow-lg cursor-pointer">
-                    <span className="text-[8px] font-bold text-cyan-400 font-mono">HF</span>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 7: WHY CHOOSE PLATFORM COMPARATIVE
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-6xl mx-auto"
-              >
-                <div className="text-center space-y-3">
-                  <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Comparative Matrix
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    Objective Matching vs Manual Search
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-xl mx-auto">
-                    Traditional filtering leaves vacancies open for months. RADIX compiles match reports instantly.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                  {/* Traditional */}
-                  <div className="glass-panel border border-red-500/15 rounded-3xl p-8 space-y-6">
-                    <h3 className="text-lg font-bold text-red-400 font-display flex items-center gap-2">
-                      <X className="h-5 w-5" />
-                      Traditional Recruiting
-                    </h3>
-                    <ul className="space-y-4 text-xs text-slate-405 text-left">
-                      <li className="flex gap-2.5 items-start">
-                        <span className="text-red-500 shrink-0">•</span>
-                        <span>**Manual Resume Reviews**: Spending hours parsing formatting structures manually.</span>
-                      </li>
-                      <li className="flex gap-2.5 items-start">
-                        <span className="text-red-500 shrink-0">•</span>
-                        <span>**Rigid Keyword Matching**: Missing high-fit candidates due to slight differences in naming conventions.</span>
-                      </li>
-                      <li className="flex gap-2.5 items-start">
-                        <span className="text-red-500 shrink-0">•</span>
-                        <span>**High Subjective Bias**: Assessments depend on reviewer opinion rather than weighted skill vectors.</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* RADIX */}
-                  <div className="glass-panel border border-purple-500/25 rounded-3xl p-8 space-y-6 relative">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-blue-600 rounded-3xl blur opacity-15 -z-10" />
-                    <h3 className="text-lg font-bold text-purple-400 font-display flex items-center gap-2">
-                      <Check className="h-5 w-5" />
-                      RADIX Semantic Matching
-                    </h3>
-                    <ul className="space-y-4 text-xs text-slate-350 text-left">
-                      <li className="flex gap-2.5 items-start">
-                        <span className="text-purple-400 shrink-0">•</span>
-                        <span>**Automated Structuring**: Converts PDF or DOCX files into indexed JSON profiles in seconds.</span>
-                      </li>
-                      <li className="flex gap-2.5 items-start">
-                        <span className="text-purple-400 shrink-0">•</span>
-                        <span>**Semantic Embedding Search**: Vectors measure conceptual overlap (e.g. FastAPI matches Python Web APIs).</span>
-                      </li>
-                      <li className="flex gap-2.5 items-start">
-                        <span className="text-purple-400 shrink-0">•</span>
-                        <span>**Objective Scoring Matrix**: Candidates are graded mathematically on skill alignment and experience.</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 8: STATISTICS PANELS
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="grid grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto"
-              >
+              {/* Statistics Panel */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
                 {[
                   { value: '100%', label: 'Cloud Sync State', desc: 'Secure Supabase Storage' },
                   { value: '< 900ms', label: 'Semantic Matching', desc: 'Vector cosine distance overlap' },
                   { value: '99.1%', label: 'Extraction Rating', desc: 'Precision structure mapping' },
-                  { value: '85%', label: 'Time Savings', desc: 'Slashes manual screening loops' }
+                  { value: '0.0%', label: 'Manual Typings', desc: 'Pre-populates forms automatically' }
                 ].map((stat, idx) => (
-                  <div key={idx} className="glass-panel rounded-2xl p-6 text-center border border-white/5 shadow-lg">
-                    <p className="text-3xl font-black font-display bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{stat.value}</p>
-                    <p className="text-[10px] font-bold text-purple-400 mt-1.5 uppercase tracking-wider font-display">{stat.label}</p>
-                    <p className="text-[9px] text-slate-500 mt-1 leading-normal font-semibold">{stat.desc}</p>
-                  </div>
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 15 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: idx * 0.08 }}
+                    className="glass-panel rounded-2xl p-5 text-center"
+                  >
+                    <p className={`text-3xl font-black font-display bg-gradient-to-r ${
+                      theme === 'light' ? 'from-slate-900 to-slate-600' : 'from-white to-slate-400'
+                    } bg-clip-text text-transparent`}>{stat.value}</p>
+                    <p className="text-[10px] font-bold text-purple-400 mt-1.5 uppercase tracking-wider">{stat.label}</p>
+                    <p className="text-[9px] text-slate-500 dark:text-slate-500 mt-1 leading-normal">{stat.desc}</p>
+                  </motion.div>
                 ))}
-              </motion.div>
+              </div>
 
-              {/* ----------------------------------------------------------
-                  SECTION 9: INSIGHTS PREVIEW
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-5xl mx-auto"
-              >
-                <div className="text-center space-y-3">
-                  <span className="text-[9px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Interactive Preview
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    Actionable Recruiter Insights
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-xl mx-auto">
-                    RADIX compiles candidate statistics into structured, thematic suitability reports.
+              {/* Core AI Engine Interactive Visual Journey Stepper */}
+              <div className="space-y-12 max-w-5xl mx-auto py-10">
+                <div className="text-center space-y-2">
+                  <h3 className={`text-2xl font-black font-display tracking-tight bg-gradient-to-r ${
+                    theme === 'light' ? 'from-slate-900 via-slate-700 to-purple-650' : 'from-white via-slate-100 to-purple-400'
+                  } bg-clip-text text-transparent`}>
+                    How RADIX Power-Matches Talent
+                  </h3>
+                  <p className={`text-xs max-w-lg mx-auto ${theme === 'light' ? 'text-slate-600' : 'text-slate-500'}`}>
+                    Follow the interactive journey to discover how our Sentence Transformers and structural extraction pipelines benchmark candidates.
                   </p>
                 </div>
 
-                <div className="glass-panel rounded-3xl p-6 border border-white/5 shadow-2xl space-y-6 text-left max-w-3xl mx-auto">
-                  <div className="flex justify-between items-center border-b border-slate-900 pb-4">
-                    <div>
-                      <p className="text-[9px] text-slate-500 uppercase font-black tracking-wider">Hiring Recommendation Preview</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold border border-emerald-500/30 text-emerald-400 bg-emerald-500/5 uppercase tracking-wider">
-                          Strong Match Recommended
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[9px] text-slate-500 uppercase font-black tracking-wider">Semantic Fit Score</p>
-                      <p className="text-xl font-black text-cyan-400 font-display">94.8%</p>
-                    </div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-4">
+                  {/* Left: Dynamic timeline nodes */}
+                  <div className="lg:col-span-5 space-y-2 relative pr-4">
+                    {/* Stepper background connector line */}
+                    <div className="absolute left-7 top-8 bottom-8 w-0.5 bg-slate-800/20 z-0 hidden lg:block" />
+                    
+                    {storySteps.map((step, idx) => {
+                      const isActive = activeStoryStep === idx;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setActiveStoryStep(idx);
+                          }}
+                          className={`w-full text-left p-3.5 rounded-2xl border transition-all duration-300 flex items-center gap-4 cursor-pointer relative z-10 group ${
+                            isActive
+                              ? theme === 'light'
+                                ? 'bg-white border-purple-500/20 shadow-lg'
+                                : 'bg-slate-900/60 border-purple-500/20 shadow-2xl'
+                              : 'bg-transparent border-transparent hover:bg-slate-50/50 dark:hover:bg-white/5'
+                          }`}
+                        >
+                          {/* Number Bubble indicator */}
+                          <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-black font-mono transition-all ${
+                            isActive
+                              ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
+                              : 'bg-slate-900 border border-slate-800 text-slate-500 group-hover:text-slate-350'
+                          }`}>
+                            {idx + 1}
+                          </div>
+                          
+                          <div className="flex-1 space-y-0.5">
+                            <h4 className={`text-xs font-bold transition-colors ${
+                              isActive 
+                                ? theme === 'light' ? 'text-purple-600' : 'text-purple-400' 
+                                : theme === 'light' ? 'text-slate-800' : 'text-slate-350'
+                            }`}>
+                              {step.title}
+                            </h4>
+                            <p className="text-[10px] text-slate-500 font-semibold">{step.sub}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
 
-                  <div className="space-y-3">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Key Skill Overlaps</p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/25 text-purple-400 text-[9px] font-bold">Python</span>
-                      <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-400 text-[9px] font-bold">FastAPI</span>
-                      <span className="px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/25 text-cyan-400 text-[9px] font-bold">React.js</span>
-                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[9px] font-bold">Vector DBs</span>
-                    </div>
+                  {/* Right: Dynamic animated graphic detail panel */}
+                  <div className="lg:col-span-7 h-96 flex flex-col">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={activeStoryStep}
+                        initial={{ opacity: 0, x: 20, scale: 0.98 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -20, scale: 0.98 }}
+                        transition={{ duration: 0.3 }}
+                        className="flex-1 glass-panel rounded-3xl p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden border border-purple-500/10 min-h-[360px]"
+                      >
+                        {/* Top: Text description details */}
+                        <div className="space-y-3 z-10">
+                          <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider w-fit block">
+                            Platform Step {activeStoryStep + 1}
+                          </span>
+                          <h4 className={`text-base font-black font-display ${theme === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>
+                            {storySteps[activeStoryStep].title}
+                          </h4>
+                          <p className={`text-xs leading-relaxed ${theme === 'light' ? 'text-slate-650' : 'text-slate-405'}`}>
+                            {storySteps[activeStoryStep].desc}
+                          </p>
+                        </div>
+
+                        {/* Center: Custom SVG Animated Illustration widget */}
+                        <div className="h-36 w-full flex items-center justify-center z-10">
+                          {renderVisualIllustration(storySteps[activeStoryStep].visualType)}
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
-
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Suitability Summary</p>
-                    <p className="text-xs text-slate-350 leading-relaxed bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
-                      The candidate has 4.5 years of experience in high-performance Python architectures, with verified competencies in asynchronous REST APIs (FastAPI) and modern UI frameworks. Matches core criteria with excellent alignment in database queries and vector indexes. Recommend proceeding directly to technical screening.
-                    </p>
-                  </div>
                 </div>
-              </motion.div>
+              </div>
 
-              {/* ----------------------------------------------------------
-                  SECTION 10: FUTURE ROADMAP
-                 ---------------------------------------------------------- */}
+              {/* Call To Action banner */}
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-6xl mx-auto"
+                whileHover={{ scale: 1.005 }}
+                className="max-w-4xl mx-auto p-8 rounded-3xl bg-gradient-to-r from-purple-950/20 via-indigo-955/20 to-slate-950 border border-purple-50/15 text-center relative overflow-hidden backdrop-blur-md"
               >
-                <div className="text-center space-y-3">
-                  <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Milestones
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    Future Roadmap Developments
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-xl mx-auto">
-                    Follow our journey as we deploy advanced cognitive agent architectures.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-                  {[
-                    {
-                      quarter: "Q3 2026",
-                      title: "Autonomous Interview Agents",
-                      desc: "Integrate LLM conversational voice agents to conduct initial technical chats, logging response structures directly to profiles."
-                    },
-                    {
-                      quarter: "Q4 2026",
-                      title: "Predictive Reskilling Analytics",
-                      desc: "Surface upskilling courses and track candidate training progress inside organizational dashboards."
-                    },
-                    {
-                      quarter: "Q1 2027",
-                      title: "Global Talent Pool Indexing",
-                      desc: "Search global databases of pre-parsed resumes with cross-border language translation overlays."
-                    }
-                  ].map((milestone, idx) => (
-                    <div key={idx} className="glass-panel border border-white/5 rounded-3xl p-8 space-y-4 shadow-xl">
-                      <span className="text-xs font-black font-mono text-purple-400 bg-purple-500/10 px-3 py-1 rounded-lg border border-purple-500/20">
-                        {milestone.quarter}
-                      </span>
-                      <h3 className="text-base font-bold text-white font-display mt-2">{milestone.title}</h3>
-                      <p className="text-xs text-slate-405 leading-relaxed">{milestone.desc}</p>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 11: MEET THE TEAM
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5 }}
-                className="space-y-16 max-w-5xl mx-auto"
-              >
-                <div className="text-center space-y-3">
-                  <span className="text-[9px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-                    Creators
-                  </span>
-                  <h2 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-                    The RADIX Architects
-                  </h2>
-                  <p className="text-slate-405 text-sm max-w-xl mx-auto">
-                    Built by team players dedicated to solving the recruitment bottleneck.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {[
-                    { name: "Alex Chen", role: "Lead AI Architect", specialty: "Transformers & Vector Indexes" },
-                    { name: "Sarah Vance", role: "Creative WebGL Designer", specialty: "Immersive Shaders & UX" },
-                    { name: "Marcus Stone", role: "Senior Systems Engineer", specialty: "Asynchronous API Pipelinings" }
-                  ].map((member, idx) => (
-                    <motion.div
-                      key={idx}
-                      whileHover={{ y: -8, border: '1px solid rgba(6, 182, 212, 0.2)' }}
-                      className="glass-panel border border-white/5 rounded-3xl p-6 text-center space-y-3 shadow-xl transition-all duration-300 relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-500 to-cyan-500" />
-                      <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-slate-800 to-slate-900 border border-white/10 mx-auto flex items-center justify-center text-lg font-black text-cyan-400 font-display">
-                        {member.name.split(' ').map(n=>n[0]).join('')}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white font-display">{member.name}</h4>
-                        <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mt-0.5">{member.role}</p>
-                        <p className="text-[9px] text-slate-500 mt-2 font-semibold">{member.specialty}</p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* ----------------------------------------------------------
-                  SECTION 12: FINAL CTA
-                 ---------------------------------------------------------- */}
-              <motion.div
-                initial={{ opacity: 0, y: 35 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
-                className="max-w-4xl mx-auto p-12 rounded-3xl bg-gradient-to-r from-purple-950/25 via-indigo-950/25 to-slate-950 border border-purple-500/20 text-center relative overflow-hidden backdrop-blur-md shadow-2xl"
-              >
-                <div className="absolute top-0 left-0 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl -z-10" />
-                <div className="absolute bottom-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl -z-10" />
-                
-                <h3 className="text-2xl sm:text-4xl font-black text-white font-display">
-                  Accelerate Candidate Compatibility Benchmarks
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-400 mt-4 max-w-xl mx-auto leading-relaxed">
-                  Start screening applicants instantly. Parse resumes and compile detailed suitability reports in real-time.
-                </p>
-                
-                <div className="flex flex-wrap items-center justify-center gap-4 mt-8">
-                  <button
-                    onClick={() => setActiveTab('match')}
-                    className="px-8 py-3.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs shadow-xl cursor-pointer transition-all"
-                  >
-                    Open Workspace
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('dashboard')}
-                    className="px-8 py-3.5 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-white font-bold text-xs cursor-pointer transition-all"
-                  >
-                    Explore Dashboard
-                  </button>
-                </div>
+                <div className="absolute top-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl" />
+                <h3 className="text-xl font-bold text-slate-100 font-display">Verify Candidate Technical Alignment</h3>
+                <p className="text-xs text-slate-400 mt-2 max-w-md mx-auto">Upload candidate resumes, seed mock job specifications, and preview suitability analytics reports.</p>
+                <button
+                  onClick={() => setActiveTab('match')}
+                  className="mt-6 px-6 py-2.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Launch Match Workspace
+                </button>
               </motion.div>
 
               {/* Footer */}
-              <footer className="border-t border-slate-905 pt-8 text-center text-xs text-slate-500 max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 font-semibold">
+              <footer className="border-t border-slate-905 pt-8 text-center text-xs text-slate-500 max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                 <p>© 2026 RADIX Talent Match Platform. Built for Talent Match Hackathon.</p>
                 <div className="flex gap-4">
                   <a href="#docs" onClick={(e) => { e.preventDefault(); }} className="hover:text-slate-400 transition-colors">Developer Docs</a>
@@ -4010,10 +3981,8 @@ export default function App() {
                     <div>
                       <p className="text-[9px] text-slate-505 uppercase font-black tracking-wider">Hiring Recommendation</p>
                       <div className="flex items-center gap-2.5 mt-1.5">
-                        <span className={`w-2 h-2 rounded-full ${recDotColor} animate-pulse`} />
-                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${recColor} uppercase tracking-wider`}>
-                          {recText}
-                        </span>
+                        <span className={`w-2.5 h-2.5 rounded-full ${recDotColor} animate-pulse`} />
+                        <span className="text-sm font-bold text-slate-202 uppercase tracking-wide">{recText}</span>
                       </div>
                     </div>
 

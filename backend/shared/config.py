@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -19,16 +18,19 @@ class Settings(BaseSettings):
     OPENAI_MODEL_NAME: str = os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
     
     # SQLite fallback configuration
-    USE_LOCAL_FALLBACK: bool = False
+    USE_LOCAL_FALLBACK: bool = os.getenv("USE_LOCAL_FALLBACK", "false").lower() in ("true", "1", "yes")
     SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "talent_match.db")
-    
-    model_config = ConfigDict(case_sensitive=True)
     
     def __init__(self, **values):
         super().__init__(**values)
-        # Force fallback if credentials are blank or placeholders
+        # Force fallback if credentials are blank or placeholders or USE_LOCAL_FALLBACK is set
         if (not self.SUPABASE_URL or "placeholder" in self.SUPABASE_URL.lower()) or \
-           (not self.SUPABASE_KEY or "placeholder" in self.SUPABASE_KEY.lower()):
+           (not self.SUPABASE_KEY or "placeholder" in self.SUPABASE_KEY.lower()) or \
+           os.getenv("USE_LOCAL_FALLBACK", "").lower() in ("true", "1", "yes"):
             self.USE_LOCAL_FALLBACK = True
+
+    class Config:
+        case_sensitive = True
+
 
 settings = Settings()

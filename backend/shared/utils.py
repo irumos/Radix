@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import uuid
+import sqlite3
 from typing import List, Dict, Any, Optional
 from shared.config import settings
 from shared.supabase_client import supabase_client
@@ -415,8 +416,6 @@ def init_sqlite_db():
 if settings.USE_LOCAL_FALLBACK:
     logger.info("Initializing fallback SQLite DB structure...")
     init_sqlite_db()
-
-import sqlite3
 
 def db_save_profile_sqlite(profile_id: str, profile_data: Dict[str, Any]) -> Dict[str, Any]:
     conn = get_db_connection()

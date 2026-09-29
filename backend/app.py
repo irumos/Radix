@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
-from contextlib import asynccontextmanager
 from shared.config import settings
 from shared.utils import logger, db_save_job
 from modules.resume_parser.router import router as resume_router
@@ -10,9 +9,34 @@ from modules.jd_analytics.router import router as jd_router
 from modules.profile_builder.router import router as profile_router
 from modules.talent_check.router import router as match_router
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup Database Seeding
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    description="Production-grade AI-powered Talent Match Platform for RADIX Hackathon",
+    version="1.0.0"
+)
+
+# Setup CORS for frontend connection
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust for production deploy
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files folder for local-first storage fallback
+static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+os.makedirs(static_path, exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_path), name="static")
+
+# Include modules under the shared API prefix
+app.include_router(resume_router, prefix=settings.API_V1_STR)
+app.include_router(jd_router, prefix=settings.API_V1_STR)
+app.include_router(profile_router, prefix=settings.API_V1_STR)
+app.include_router(match_router, prefix=settings.API_V1_STR)
+
+@app.on_event("startup")
+async def startup_event():
     logger.info("Application startup: seeding database with default job profiles...")
     mock_jobs = [
         {
@@ -40,35 +64,6 @@ async def lifespan(app: FastAPI):
             logger.info(f"Successfully seeded mock job: {job['title']} ({job['id']})")
         except Exception as e:
             logger.error(f"Error seeding mock job {job['id']}: {e}")
-    yield
-    # Shutdown logic (no active resources need manual closing)
-
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    description="Production-grade AI-powered Talent Match Platform for RADIX Hackathon",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-# Setup CORS for frontend connection
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production deploy
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Mount static files folder for local-first storage fallback
-static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-os.makedirs(static_path, exist_ok=True)
-app.mount("/static", StaticFiles(directory=static_path), name="static")
-
-# Include modules under the shared API prefix
-app.include_router(resume_router, prefix=settings.API_V1_STR)
-app.include_router(jd_router, prefix=settings.API_V1_STR)
-app.include_router(profile_router, prefix=settings.API_V1_STR)
-app.include_router(match_router, prefix=settings.API_V1_STR)
 
 @app.get("/", tags=["Root"])
 async def read_root():
