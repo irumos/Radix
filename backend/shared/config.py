@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     
     # SQLite fallback configuration
     USE_LOCAL_FALLBACK: bool = os.getenv("USE_LOCAL_FALLBACK", "false").lower() in ("true", "1", "yes")
-    SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "talent_match.db")
+    SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "/tmp/talent_match.db" if os.getenv("VERCEL") else "talent_match.db")
     
     def __init__(self, **values):
         super().__init__(**values)
